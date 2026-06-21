@@ -123,3 +123,8 @@ RECOMMENDATION_MIN_NEXT_STEPS: int = 3
 
 RECOMMENDATION_MAX_NEXT_STEPS: int = 10
 """Maximum number of actionable next steps allowed in a single report."""
+
+MAX_RECOMMENDATIONS: int = 15
+"""Maximum number of recommendations per analysis job.
+All P1 items are preserved first, then P2, then P3. Lowest-priority items are
+dropped when the total count exceeds this cap."""

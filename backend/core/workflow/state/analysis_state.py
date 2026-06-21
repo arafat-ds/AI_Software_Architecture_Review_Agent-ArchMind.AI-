@@ -21,7 +21,7 @@ NODE → FIELD WRITE MAP:
   SecurityAnalysisNode  → security_section
   RAGRetrievalNode      → rag_context
   RecommendationNode    → recommendations_section
-  ReportAssemblyNode    → final_report_markdown
+  ReportAssemblyNode    → final_report, final_report_markdown
   PersistenceNode       → (writes to Supabase; no state field)
 
 Dependency rule: core/workflow/state may import from shared/ and config/.
@@ -39,7 +39,7 @@ from shared.types.job_types import NodeExecution, WorkflowError
 from shared.types.manifest_types import RepositoryManifest
 from shared.types.pcr_types import ParsedCodeRepresentation
 from shared.types.rag_types import RAGContext
-from shared.types.report_types import RecommendationSection
+from shared.types.report_types import FinalReport, RecommendationSection
 
 
 class AnalysisState(TypedDict, total=True):
@@ -110,9 +110,13 @@ class AnalysisState(TypedDict, total=True):
     recommendations_section: RecommendationSection | None
     """Set by RecommendationNode. None until recommendation synthesis completes."""
 
+    final_report: FinalReport | None
+    """Set by ReportAssemblyNode. None until report assembly completes.
+    Contains the fully validated FinalReport Pydantic model."""
+
     final_report_markdown: str | None
     """Set by ReportAssemblyNode. None until report assembly completes.
-    Contains the complete assembled markdown report as a single string."""
+    Contains final_report.markdown_content as a convenience field."""
 
 
 def create_initial_state(job_id: UUID, repo_url: str) -> AnalysisState:
@@ -149,6 +153,7 @@ def create_initial_state(job_id: UUID, repo_url: str) -> AnalysisState:
         security_section=None,
         rag_context=None,
         recommendations_section=None,
+        final_report=None,
         final_report_markdown=None,
     )
 
