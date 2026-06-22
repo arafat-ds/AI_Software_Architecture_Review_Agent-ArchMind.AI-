@@ -123,9 +123,14 @@ class SecurityService:
         if not isinstance(finding_descriptions, dict):
             finding_descriptions = {}
 
+        rag_query_hints = data.get("rag_query_hints", {})
+        if not isinstance(rag_query_hints, dict):
+            rag_query_hints = {}
+
         return {
             "narrative": narrative,
             "finding_descriptions": finding_descriptions,
+            "rag_query_hints": rag_query_hints,
         }
 
     # ------------------------------------------------------------------
@@ -175,8 +180,9 @@ def _build_findings(
     llm_data: dict,
     model_id: str,
 ) -> list[SecurityFinding]:
-    """Combine rule engine FindingSpec entries with LLM-generated descriptions."""
+    """Combine rule engine FindingSpec entries with LLM-generated text fields."""
     descriptions = llm_data.get("finding_descriptions", {})
+    rag_hints = llm_data.get("rag_query_hints", {})
     findings: list[SecurityFinding] = []
 
     for spec in finding_specs:
@@ -188,6 +194,12 @@ def _build_findings(
                 "requiring manual security review."
             )
 
+        raw_hint = rag_hints.get(spec.finding_id, "")
+        rag_query_hint = str(raw_hint).strip()
+        if not rag_query_hint:
+            owasp_str = spec.owasp_category.value if spec.owasp_category else "security vulnerability"
+            rag_query_hint = f"{spec.title} {owasp_str} remediation and mitigation"
+
         findings.append(SecurityFinding(
             finding_id=spec.finding_id,
             title=spec.title,
@@ -197,6 +209,7 @@ def _build_findings(
             cwe_id=spec.cwe_id,
             evidence_refs=spec.evidence_refs,
             description=description,
+            rag_query_hint=rag_query_hint,
         ))
 
     return findings

@@ -1,15 +1,12 @@
 """ArchMind AI LangGraph workflow graph construction.
 
-Builds and compiles the six-node analysis workflow as a LangGraph
+Builds and compiles the seven-node analysis workflow as a LangGraph
 StateGraph. The compiled graph is cached as a process-lifetime singleton.
 
-Workflow sequence (Phase 3):
+Workflow sequence:
     IngestNode → ParseNode → ArchitectureAnalysisNode →
-    SecurityAnalysisNode → RecommendationNode → ReportGenerationNode
-
-Phase 4 will replace placeholder nodes with full agent services.
-Phase 5 will insert RAGRetrievalNode between SecurityAnalysisNode
-and RecommendationNode.
+    SecurityAnalysisNode → RAGRetrievalNode →
+    RecommendationNode → ReportGenerationNode
 
 Usage:
     from core.workflow.graph import get_compiled_graph
@@ -28,6 +25,7 @@ from langgraph.graph.state import CompiledStateGraph
 from core.workflow.nodes.architecture_node import architecture_analysis_node
 from core.workflow.nodes.ingest_node import ingest_node
 from core.workflow.nodes.parse_node import parse_node
+from core.workflow.nodes.rag_node import rag_retrieval_node
 from core.workflow.nodes.recommendation_node import recommendation_node
 from core.workflow.nodes.report_node import report_generation_node
 from core.workflow.nodes.security_node import security_analysis_node
@@ -57,6 +55,7 @@ def get_compiled_graph() -> CompiledStateGraph:
     graph.add_node("parse_node", parse_node)
     graph.add_node("architecture_analysis_node", architecture_analysis_node)
     graph.add_node("security_analysis_node", security_analysis_node)
+    graph.add_node("rag_retrieval_node", rag_retrieval_node)
     graph.add_node("recommendation_node", recommendation_node)
     graph.add_node("report_generation_node", report_generation_node)
 
@@ -64,7 +63,8 @@ def get_compiled_graph() -> CompiledStateGraph:
     graph.add_edge("ingest_node", "parse_node")
     graph.add_edge("parse_node", "architecture_analysis_node")
     graph.add_edge("architecture_analysis_node", "security_analysis_node")
-    graph.add_edge("security_analysis_node", "recommendation_node")
+    graph.add_edge("security_analysis_node", "rag_retrieval_node")
+    graph.add_edge("rag_retrieval_node", "recommendation_node")
     graph.add_edge("recommendation_node", "report_generation_node")
     graph.add_edge("report_generation_node", END)
 

@@ -351,6 +351,13 @@ class SecurityFinding(BaseModel):
             "consistent with the signal-based (non-confirmed) nature of the finding."
         ),
     )
+    rag_query_hint: str = Field(
+        ...,
+        description=(
+            "Suggested semantic query for RAG retrieval targeting this finding. "
+            "Used by RAGRetrievalNode to find relevant security knowledge base context."
+        ),
+    )
     is_confirmed_vulnerability: Literal[False] = Field(
         default=False,
         description=(
@@ -369,6 +376,15 @@ class SecurityFinding(BaseModel):
                 f"finding_id '{value}' does not match required format 'SF-NNN' "
                 "(e.g. 'SF-001')."
             )
+        return value
+
+    @field_validator("rag_query_hint", mode="before")
+    @classmethod
+    def validate_rag_query_hint_non_empty(cls, value: str) -> str:
+        """Prevent empty rag_query_hint."""
+        stripped = str(value).strip()
+        if not stripped:
+            raise ValueError("rag_query_hint must not be empty or whitespace only.")
         return value
 
     @field_validator("cwe_id", mode="before")

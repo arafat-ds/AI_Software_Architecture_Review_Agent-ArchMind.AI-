@@ -24,6 +24,7 @@ _EXPECTED_NODES = {
     "parse_node",
     "architecture_analysis_node",
     "security_analysis_node",
+    "rag_retrieval_node",
     "recommendation_node",
     "report_generation_node",
 }
@@ -43,8 +44,8 @@ def test_graph_compiles_without_error():
     assert compiled is not None
 
 
-def test_graph_contains_all_six_nodes():
-    """Compiled graph must contain exactly the six expected named nodes."""
+def test_graph_contains_all_seven_nodes():
+    """Compiled graph must contain exactly the seven expected named nodes."""
     compiled = get_compiled_graph()
     graph_nodes = set(compiled.get_graph().nodes.keys())
     named_nodes = {n for n in graph_nodes if not n.startswith("__")}

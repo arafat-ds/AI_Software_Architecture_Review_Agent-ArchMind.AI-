@@ -136,6 +136,7 @@ def _make_finding(fid: str, severity: Severity) -> object:
         owasp_category=OWASPCategory.A03_INJECTION,
         cwe_id="CWE-89",
         description="A security finding description for testing purposes in unit tests.",
+        rag_query_hint=f"injection prevention and parameterized queries for {fid}",
     )
 
 

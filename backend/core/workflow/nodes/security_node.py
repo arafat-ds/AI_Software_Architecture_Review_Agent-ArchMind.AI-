@@ -68,7 +68,7 @@ def security_analysis_node(state: AnalysisState) -> dict[str, Any]:
     Returns:
         Partial state dict containing:
         - security_section: Populated SecuritySection
-        - workflow_status: Advanced to SYNTHESIZING
+        - workflow_status: Advanced to RETRIEVING_RAG
         - node_execution_log: Updated with completion record
         - errors: Unchanged on success; appended on failure
 
@@ -100,7 +100,7 @@ def security_analysis_node(state: AnalysisState) -> dict[str, Any]:
 
         return {
             "security_section": section,
-            "workflow_status": WorkflowStatus.SYNTHESIZING,
+            "workflow_status": WorkflowStatus.RETRIEVING_RAG,
             "node_execution_log": state["node_execution_log"],
             "errors": state["errors"],
         }

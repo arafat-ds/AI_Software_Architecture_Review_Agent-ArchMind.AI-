@@ -14,7 +14,7 @@ from typing import Any
 
 from qdrant_client import QdrantClient as _QdrantLibClient
 from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
 from shared.exceptions.rag_exceptions import (
     CollectionNotFoundError,
@@ -124,6 +124,7 @@ class QdrantClient:
         query_vector: list[float],
         top_k: int,
         score_threshold: float,
+        domain_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for the most similar vectors above a relevance threshold.
 
@@ -132,6 +133,9 @@ class QdrantClient:
             query_vector: The query embedding vector.
             top_k: Maximum number of results to return.
             score_threshold: Minimum cosine similarity score (0.0–1.0).
+            domain_filter: When set, only chunks with payload field
+                ``domain`` equal to this value are returned.
+                Mandatory for architecture/security domain separation.
 
         Returns:
             List of dicts with keys: ``id``, ``score``, ``payload``.
@@ -140,6 +144,12 @@ class QdrantClient:
             CollectionNotFoundError: Collection does not exist.
             RetrievalError: Search failed for any other reason.
         """
+        query_filter: Filter | None = None
+        if domain_filter:
+            query_filter = Filter(
+                must=[FieldCondition(key="domain", match=MatchValue(value=domain_filter))]
+            )
+
         try:
             results = self._client.search(
                 collection_name=collection_name,
@@ -147,6 +157,7 @@ class QdrantClient:
                 limit=top_k,
                 score_threshold=score_threshold,
                 with_payload=True,
+                query_filter=query_filter,
             )
             logger.debug("Qdrant search OK", extra={
                 "collection": collection_name,

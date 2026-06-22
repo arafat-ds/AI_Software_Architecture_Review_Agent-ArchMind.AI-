@@ -72,10 +72,17 @@ KB_CHUNK_MIN_LENGTH: int = 100
 KB_CATEGORY_DOMAIN_MAP: dict[str, str] = {
     "architecture": "ARCHITECTURE",
     "security": "SECURITY",
-    "quality": "QUALITY",
 }
 """Maps knowledge base subdirectory names to RAGDomain enum string values.
+Only architecture and security are active KB domains for MVP.
 Add new categories here; the loader requires no other changes."""
+
+EMBEDDING_VECTOR_SIZE: int = 768
+"""Dimensionality of text-embedding-004 vectors stored in Qdrant."""
+
+MAX_RAG_QUERIES: int = 10
+"""Maximum number of Qdrant queries per analysis job.
+Queries are sorted by severity descending before truncation."""
 
 # ---------------------------------------------------------------------------
 # LLM / Gemini
