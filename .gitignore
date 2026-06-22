@@ -1,3 +1,4 @@
+# ArchMind AI — ignored paths
 .venv/
 __pycache__/
 .pytest_cache/
