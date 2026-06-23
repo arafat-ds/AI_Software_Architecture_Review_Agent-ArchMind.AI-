@@ -351,3 +351,191 @@ def test_counts_by_priority_consistent_with_specs():
     assert output.counts_by_priority["P1"] == 1
     assert output.counts_by_priority["P2"] == 1
     assert output.counts_by_priority["P3"] == 1
+
+
+# ---------------------------------------------------------------------------
+# _map_rag_chunks with populated RAGContext
+# ---------------------------------------------------------------------------
+
+
+def _make_rag_context(queries, chunks):
+    from config.constants import RAG_RELEVANCE_THRESHOLD
+    from datetime import datetime, timezone
+    from shared.types.rag_types import RAGContext
+
+    return RAGContext(
+        context_id=uuid4(),
+        job_id=_JOB_ID,
+        queries=queries,
+        retrieved_chunks=chunks,
+        total_queries_made=len(queries),
+        total_chunks_retrieved=len(chunks),
+        chunks_filtered_count=0,
+        retrieval_timestamp=datetime.now(tz=timezone.utc),
+        relevance_threshold_used=RAG_RELEVANCE_THRESHOLD,
+    )
+
+
+def _make_rag_query(query_id, source_finding_ids, result_chunk_ids=None):
+    from shared.types.enums import RAGDomain
+    from shared.types.rag_types import RAGQuery
+
+    return RAGQuery(
+        query_id=query_id,
+        query_text="test query text for unit test fixture",
+        source_domain=RAGDomain.ARCHITECTURE,
+        source_finding_ids=source_finding_ids,
+        result_chunk_ids=result_chunk_ids or [],
+    )
+
+
+def _make_rag_chunk(chunk_id, content, query_ids_matched=None):
+    from config.constants import RAG_RELEVANCE_THRESHOLD
+    from shared.types.enums import RAGDomain
+    from shared.types.rag_types import RAGChunk
+
+    return RAGChunk(
+        chunk_id=chunk_id,
+        document_title="Test KB Document",
+        domain=RAGDomain.ARCHITECTURE,
+        content_excerpt=content,
+        relevance_score=RAG_RELEVANCE_THRESHOLD,
+        query_ids_matched=query_ids_matched or [],
+    )
+
+
+def test_map_rag_chunks_populates_chunk_ids_when_finding_matches():
+    chunk = _make_rag_chunk("architecture/layered/0", "Layered architecture guidance content.")
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert output.specs[0].rag_chunk_ids == ["architecture/layered/0"]
+
+
+def test_map_rag_chunks_populates_rag_excerpts_from_content():
+    content = "Specific guidance about dependency inversion and layer isolation."
+    chunk = _make_rag_chunk("architecture/layered/0", content)
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert output.specs[0].rag_excerpts == [content]
+
+
+def test_map_rag_chunks_finding_with_no_matching_query_gets_empty_ids():
+    chunk = _make_rag_chunk("architecture/layered/0", "Some guidance content text here.")
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-999"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert output.specs[0].rag_chunk_ids == []
+    assert output.specs[0].rag_excerpts == []
+
+
+def test_map_rag_chunks_deduplicates_same_chunk_from_multiple_queries():
+    chunk = _make_rag_chunk("architecture/layered/0", "Shared guidance content for dedup test.")
+    query1 = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    query2 = _make_rag_query(
+        "Q-002",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query1, query2], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert output.specs[0].rag_chunk_ids == ["architecture/layered/0"]
+    assert len(output.specs[0].rag_chunk_ids) == 1
+
+
+def test_map_rag_chunks_excerpt_truncated_at_500_chars():
+    long_content = "A" * 600
+    chunk = _make_rag_chunk("architecture/layered/0", long_content)
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert len(output.specs[0].rag_excerpts[0]) == 500
+
+
+def test_run_recommendation_rules_with_rag_context_sets_chunks_used_count():
+    content = "Actionable guidance content for testing rag_chunks_used_count."
+    chunk = _make_rag_chunk("architecture/layered/0", content)
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=["architecture/layered/0"],
+    )
+    rag_context = _make_rag_context([query], [chunk])
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert output.rag_chunks_used_count == 1
+
+
+def test_map_rag_chunks_capped_at_three_excerpts_per_spec():
+    chunks = [
+        _make_rag_chunk(
+            f"architecture/layered/{i}",
+            f"Guidance content number {i} for excerpt cap test.",
+        )
+        for i in range(5)
+    ]
+    chunk_ids = [c.chunk_id for c in chunks]
+    query = _make_rag_query(
+        "Q-001",
+        source_finding_ids=["AW-001"],
+        result_chunk_ids=chunk_ids,
+    )
+    rag_context = _make_rag_context([query], chunks)
+
+    arch = _make_arch_section(weaknesses=[_make_weakness("AW-001", Severity.HIGH)])
+    sec = _make_sec_section()
+
+    output = run_recommendation_rules(arch, sec, rag_context)
+
+    assert len(output.specs[0].rag_chunk_ids) == 3
+    assert len(output.specs[0].rag_excerpts) == 3

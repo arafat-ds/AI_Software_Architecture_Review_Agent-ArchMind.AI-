@@ -18,6 +18,8 @@ from services.recommendation_agent.rule_engine import RecommendationRuleOutput, 
 SYSTEM_PROMPT = (
     "You are a senior software engineering consultant synthesising a codebase analysis. "
     "You will receive structured signals from static analysis tools. "
+    "Where knowledge base excerpts are provided for a finding, you MUST ground your "
+    "recommendation in that curated content — it takes precedence over general knowledge. "
     "Respond with valid JSON only. "
     "Do not include markdown code fences, explanatory text, "
     "or any content outside the JSON object."
@@ -68,10 +70,16 @@ Rules:
 - For each recommendation ID listed:
     - title: short action-oriented title, max 80 chars.
     - recommendation_text: specific, actionable guidance. Min 30 chars. No prescribing exact code.
+      When knowledge base excerpts are provided, draw concrete patterns, anti-patterns, and
+      remediation steps directly from those excerpts. When no excerpts are provided, draw on
+      general engineering best practices for that finding type.
     - rationale: why the issue matters and risk if ignored. Min 20 chars.
+      When knowledge base excerpts are provided, anchor the risk explanation in the specific
+      vulnerabilities or architectural problems described in those excerpts.
     - estimated_effort: one of "LOW", "MEDIUM", "HIGH". Append " (estimate)" qualifier.
-    - context: if knowledge base excerpts are provided, synthesise them. If none, draw on
-      general engineering best practices for that finding type. Min 10 chars.
+    - context: when knowledge base excerpts are provided, synthesise them into a concise
+      paragraph that captures the key guidance relevant to this finding. When no excerpts
+      are provided, draw on general engineering best practices for that finding type. Min 10 chars.
 - Use precise, technical language throughout.
 - Do not alter recommendation IDs, priorities, or categories.
 """
@@ -105,7 +113,7 @@ def _build_specs_block(specs: list[RecommendationSpec]) -> str:
         if spec.rag_excerpts:
             lines.append("    Knowledge base context:")
             for i, excerpt in enumerate(spec.rag_excerpts, start=1):
-                lines.append(f"      [{i}] {excerpt[:300]}")
+                lines.append(f"      [{i}] {excerpt[:500]}")
         else:
             lines.append("    Knowledge base context: none retrieved")
         lines.append("")
