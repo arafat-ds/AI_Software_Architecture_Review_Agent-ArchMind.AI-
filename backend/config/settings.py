@@ -95,6 +95,23 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # API / Concurrency
+    # ------------------------------------------------------------------
+
+    max_concurrent_jobs: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description=(
+            "Maximum number of analysis jobs that can run concurrently. "
+            "Controls the ThreadPoolExecutor worker count in the API process. "
+            "Each job holds a git clone, LLM connections, and Qdrant connections "
+            "for its full duration (~5-15 min). Size conservatively. "
+            "Env var: MAX_CONCURRENT_JOBS."
+        ),
+    )
+
+    # ------------------------------------------------------------------
     # Repository ingestion
     # ------------------------------------------------------------------
 

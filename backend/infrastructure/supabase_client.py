@@ -119,6 +119,34 @@ class SupabaseClient:
             })
             raise
 
+    def get_report(self, report_id: UUID) -> dict[str, Any] | None:
+        """Fetch a persisted report by report_id.
+
+        Args:
+            report_id: UUID of the FinalReport to retrieve.
+
+        Returns:
+            Raw row dict from Supabase, or None if not found.
+
+        Raises:
+            APIError: Supabase returned an error response.
+        """
+        try:
+            response = (
+                self._client.table(_TABLE_REPORTS)
+                .select("*")
+                .eq("report_id", str(report_id))
+                .maybe_single()
+                .execute()
+            )
+            return response.data
+        except APIError as exc:
+            logger.error("Supabase get_report failed", extra={
+                "report_id": str(report_id),
+                "error": str(exc),
+            })
+            raise
+
     def insert_report(self, report_data: dict[str, Any]) -> str:
         """Persist a final report and return its report_id.
 
