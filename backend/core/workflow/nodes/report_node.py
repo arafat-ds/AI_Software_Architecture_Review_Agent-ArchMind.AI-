@@ -111,7 +111,7 @@ def report_generation_node(state: AnalysisState) -> dict[str, Any]:
         return {
             "final_report": report,
             "final_report_markdown": report.markdown_content,
-            "workflow_status": WorkflowStatus.COMPLETE,
+            "workflow_status": WorkflowStatus.PERSISTING,
             "node_execution_log": state["node_execution_log"],
             "errors": state["errors"],
         }

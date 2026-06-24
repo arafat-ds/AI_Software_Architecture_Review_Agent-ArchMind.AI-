@@ -1,12 +1,12 @@
 """ArchMind AI LangGraph workflow graph construction.
 
-Builds and compiles the seven-node analysis workflow as a LangGraph
+Builds and compiles the eight-node analysis workflow as a LangGraph
 StateGraph. The compiled graph is cached as a process-lifetime singleton.
 
 Workflow sequence:
     IngestNode → ParseNode → ArchitectureAnalysisNode →
     SecurityAnalysisNode → RAGRetrievalNode →
-    RecommendationNode → ReportGenerationNode
+    RecommendationNode → ReportGenerationNode → PersistenceNode
 
 Usage:
     from core.workflow.graph import get_compiled_graph
@@ -25,6 +25,7 @@ from langgraph.graph.state import CompiledStateGraph
 from core.workflow.nodes.architecture_node import architecture_analysis_node
 from core.workflow.nodes.ingest_node import ingest_node
 from core.workflow.nodes.parse_node import parse_node
+from core.workflow.nodes.persistence_node import persistence_node
 from core.workflow.nodes.rag_node import rag_retrieval_node
 from core.workflow.nodes.recommendation_node import recommendation_node
 from core.workflow.nodes.report_node import report_generation_node
@@ -58,6 +59,7 @@ def get_compiled_graph() -> CompiledStateGraph:
     graph.add_node("rag_retrieval_node", rag_retrieval_node)
     graph.add_node("recommendation_node", recommendation_node)
     graph.add_node("report_generation_node", report_generation_node)
+    graph.add_node("persistence_node", persistence_node)
 
     graph.set_entry_point("ingest_node")
     graph.add_edge("ingest_node", "parse_node")
@@ -66,7 +68,8 @@ def get_compiled_graph() -> CompiledStateGraph:
     graph.add_edge("security_analysis_node", "rag_retrieval_node")
     graph.add_edge("rag_retrieval_node", "recommendation_node")
     graph.add_edge("recommendation_node", "report_generation_node")
-    graph.add_edge("report_generation_node", END)
+    graph.add_edge("report_generation_node", "persistence_node")
+    graph.add_edge("persistence_node", END)
 
     return graph.compile()
 

@@ -138,8 +138,8 @@ class SupabaseClient:
             raise ValueError("report_data must contain a non-empty 'report_id' key.")
 
         try:
-            self._client.table(_TABLE_REPORTS).insert(report_data).execute()
-            logger.info("Report inserted", extra={"report_id": str(report_id)})
+            self._client.table(_TABLE_REPORTS).upsert(report_data).execute()
+            logger.info("Report upserted", extra={"report_id": str(report_id)})
             return str(report_id)
         except APIError as exc:
             logger.error("Supabase insert_report failed", extra={
