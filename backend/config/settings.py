@@ -47,12 +47,12 @@ class Settings(BaseSettings):
         description="Gemini API key. Required. Never logged or exposed in responses.",
     )
     gemini_model: str = Field(
-        default="gemini-1.5-pro",
+        default="gemini-2.5-flash",
         description="Gemini model ID used for all generation tasks.",
     )
     gemini_embedding_model: str = Field(
-        default="models/text-embedding-004",
-        description="Gemini embedding model ID used by the RAG embedder.",
+        default="models/gemini-embedding-001",
+        description="Gemini embedding model ID used by the RAG embedder. Must match EMBEDDING_VECTOR_SIZE in constants.py.",
     )
 
     # ------------------------------------------------------------------

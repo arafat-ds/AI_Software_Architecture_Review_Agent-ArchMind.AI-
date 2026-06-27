@@ -1,7 +1,7 @@
 """CLI script: load the ArchMind AI knowledge base into Qdrant.
 
 Reads markdown files from knowledge_base/{architecture,security}/,
-chunks them, embeds each chunk with Gemini text-embedding-004, and
+chunks them, embeds each chunk with Gemini gemini-embedding-001, and
 upserts into the configured Qdrant collection.
 
 Usage (from project root):

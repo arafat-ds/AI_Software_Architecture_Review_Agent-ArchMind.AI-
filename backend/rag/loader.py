@@ -1,7 +1,7 @@
 """Knowledge base loader.
 
 Walks the knowledge_base/{architecture,security} directories, chunks each
-markdown document, embeds chunks with Gemini text-embedding-004, and upserts
+markdown document, embeds chunks with Gemini gemini-embedding-001, and upserts
 them into the configured Qdrant collection.
 
 Point IDs are deterministic UUID5 values derived from chunk_id. Repeated
