@@ -1,0 +1,18 @@
+# ArchMind AI — Development & Test Dependencies
+#
+# Install after requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# These packages must NOT be installed in production containers.
+
+-r requirements.txt
+
+# ---------------------------------------------------------------------------
+# Test runner
+# ---------------------------------------------------------------------------
+pytest==9.1.1
+
+# ---------------------------------------------------------------------------
+# HTTP client — required by FastAPI TestClient (starlette uses httpx internally)
+# ---------------------------------------------------------------------------
+httpx==0.28.1

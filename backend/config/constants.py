@@ -77,8 +77,8 @@ KB_CATEGORY_DOMAIN_MAP: dict[str, str] = {
 Only architecture and security are active KB domains for MVP.
 Add new categories here; the loader requires no other changes."""
 
-EMBEDDING_VECTOR_SIZE: int = 768
-"""Dimensionality of text-embedding-004 vectors stored in Qdrant."""
+EMBEDDING_VECTOR_SIZE: int = 3072
+"""Dimensionality of gemini-embedding-001 vectors stored in Qdrant."""
 
 MAX_RAG_QUERIES: int = 10
 """Maximum number of Qdrant queries per analysis job.
