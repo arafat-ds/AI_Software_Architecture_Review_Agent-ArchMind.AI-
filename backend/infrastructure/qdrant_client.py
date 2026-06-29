@@ -151,22 +151,23 @@ class QdrantClient:
             )
 
         try:
-            results = self._client.search(
+            response = self._client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=top_k,
                 score_threshold=score_threshold,
                 with_payload=True,
                 query_filter=query_filter,
             )
+            hits = response.points
             logger.debug("Qdrant search OK", extra={
                 "collection": collection_name,
-                "hits": len(results),
+                "hits": len(hits),
                 "top_k": top_k,
             })
             return [
                 {"id": str(hit.id), "score": hit.score, "payload": hit.payload or {}}
-                for hit in results
+                for hit in hits
             ]
         except UnexpectedResponse as exc:
             if "not found" in str(exc).lower():
