@@ -105,7 +105,7 @@ class ParserService:
             architecture_signals=arch_signals,
             security_signals=security_signals,
             quality_signals=quality_signals,
-            files_attempted=len(analyzable),
+            files_attempted=len(manifest.file_list),
             files_skipped=skipped_count,
             parse_duration_ms=elapsed_ms,
         )
