@@ -13,7 +13,7 @@ import re
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from config.constants import (
     RECOMMENDATION_MAX_NEXT_STEPS,
@@ -328,6 +328,10 @@ class ReportMetadata(BaseModel):
     total_llm_tokens_used: int = Field(
         ..., ge=0, description="Aggregate token count (input + output) across all LLM calls."
     )
+
+    @field_serializer("highest_severity_finding")
+    def serialize_severity(self, value: "Severity | None") -> str | None:
+        return value.name if value is not None else None
 
 
 class FinalReport(BaseModel):

@@ -68,11 +68,12 @@ def build_manifest(
         rel_dir = Path(dirpath).relative_to(root)
         rel_dir_str = str(rel_dir) if str(rel_dir) != "." else ""
 
-        child_names = sorted(dirnames + filenames)
         dir_entries.append(
             DirectoryEntry(
                 path=rel_dir_str or ".",
-                children=child_names,
+                depth=len(rel_dir.parts),
+                file_count=len(filenames),
+                subdirectory_count=len(dirnames),
             )
         )
 
@@ -98,7 +99,6 @@ def build_manifest(
 
             language = _EXTENSION_TO_LANGUAGE.get(ext, "Unknown") if is_supported else "Unknown"
             is_test = _is_test_file(rel_path_str)
-            manifest_type = _classify_manifest_type(filename)
 
             entry = FileEntry(
                 path=rel_path_str,
@@ -107,7 +107,6 @@ def build_manifest(
                 is_test_file=is_test,
                 is_skipped=is_skipped,
                 skip_reason=skip_reason,
-                manifest_type=manifest_type,
             )
             file_entries.append(entry)
 
@@ -189,7 +188,6 @@ def _trim_to_limit(
             is_test_file=f.is_test_file,
             is_skipped=True,
             skip_reason=f"Exceeds MAX_ANALYZABLE_FILES limit ({MAX_ANALYZABLE_FILES})",
-            manifest_type=f.manifest_type,
         ))
 
     combined = kept + trimmed_excess + skipped
@@ -203,9 +201,10 @@ def _build_language_stats(
     total_files = sum(file_counts.values()) or 1
     return {
         lang: LanguageStats(
+            language=lang,
             file_count=count,
-            byte_count=byte_counts[lang],
-            percentage=round(count / total_files * 100, 1),
+            estimated_line_count=max(0, byte_counts[lang] // 40),
+            percentage_of_codebase=round(count / total_files, 4),
         )
         for lang, count in file_counts.items()
     }
