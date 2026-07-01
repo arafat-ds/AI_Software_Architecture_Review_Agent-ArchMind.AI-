@@ -15,6 +15,7 @@ requiring real environment variables.
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -143,3 +144,48 @@ def test_dependency_override_reports_get_supabase_client_wired(test_app):
 
 def test_app_title_is_archmind_ai(test_app):
     assert test_app.title == "ArchMind AI"
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler
+# ---------------------------------------------------------------------------
+
+
+def test_unhandled_exception_returns_json_500(mock_settings):
+    with patch(_SETTINGS_PATCH, return_value=mock_settings):
+        app = create_app()
+
+    @app.get("/test-boom")
+    def boom():
+        raise RuntimeError("test explosion")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/test-boom")
+    assert resp.status_code == 500
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json() == {"detail": "Internal server error."}
+
+
+def test_exception_handler_does_not_intercept_422(mock_settings):
+    with patch(_SETTINGS_PATCH, return_value=mock_settings):
+        app = create_app()
+    from api.routers import jobs as jobs_router
+    app.dependency_overrides[jobs_router.get_orchestrator] = lambda: MagicMock()
+    app.dependency_overrides[jobs_router.get_executor] = lambda: MagicMock()
+    client = TestClient(app)
+    resp = client.post("/api/v1/jobs", json={"repo_url": "https://gitlab.com/owner/repo"})
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("application/json")
+
+
+def test_exception_handler_does_not_intercept_404(mock_settings):
+    with patch(_SETTINGS_PATCH, return_value=mock_settings):
+        app = create_app()
+    from api.routers import jobs as jobs_router
+    mock_supabase = MagicMock()
+    mock_supabase.get_job.return_value = None
+    app.dependency_overrides[jobs_router.get_supabase_client] = lambda: mock_supabase
+    client = TestClient(app)
+    resp = client.get(f"/api/v1/jobs/{uuid4()}")
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")
