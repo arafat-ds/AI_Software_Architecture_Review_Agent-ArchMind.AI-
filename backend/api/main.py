@@ -12,15 +12,18 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.dependencies import get_executor, get_orchestrator, get_supabase_client, shutdown_executor
 from api.routers import health
 from api.routers import jobs as jobs_router
 from api.routers import reports as reports_router
 from config.settings import get_settings
-from shared.logging.logger import configure_logging
+from shared.logging.logger import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -49,6 +52,19 @@ def create_app() -> FastAPI:
         description="AI-powered software architecture review agent.",
         lifespan=lifespan,
     )
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(
+            "Unhandled exception",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error."})
 
     app.add_middleware(
         CORSMiddleware,
