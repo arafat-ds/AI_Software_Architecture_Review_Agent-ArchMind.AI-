@@ -189,3 +189,32 @@ def test_exception_handler_does_not_intercept_404(mock_settings):
     resp = client.get(f"/api/v1/jobs/{uuid4()}")
     assert resp.status_code == 404
     assert resp.headers["content-type"].startswith("application/json")
+
+
+# ---------------------------------------------------------------------------
+# Startup: orphan recovery called during lifespan
+# ---------------------------------------------------------------------------
+
+
+def test_startup_calls_recover_orphaned_jobs(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.shutdown_executor"):
+        app = create_app()
+        with TestClient(app):
+            pass
+    mock_supabase.recover_orphaned_jobs.assert_called_once()
+
+
+def test_startup_orphan_recovery_failure_does_not_crash_server(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.side_effect = Exception("supabase down")
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.shutdown_executor"):
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/health")
+    assert resp.status_code == 200

@@ -10,14 +10,17 @@ is contained here.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
+from config.constants import ORPHAN_RECOVERY_ERROR_MESSAGE
 from shared.exceptions.workflow_exceptions import JobNotFoundError
 from shared.logging.logger import get_logger
+from shared.types.enums import JobStatus
 from shared.types.job_types import JobRecord
 
 logger = get_logger(__name__)
@@ -175,3 +178,86 @@ class SupabaseClient:
                 "error": str(exc),
             })
             raise
+
+    def list_jobs(self, status_filter: str | None = None) -> list[dict[str, Any]]:
+        """Return all job records, optionally filtered by status.
+
+        Args:
+            status_filter: When provided, only jobs with this status string
+                are returned (e.g. ``"RUNNING"``). None returns all jobs.
+
+        Returns:
+            List of raw job row dicts ordered by created_at descending.
+            Empty list when no rows match.
+
+        Raises:
+            APIError: Supabase returned an error response.
+        """
+        try:
+            query = self._client.table(_TABLE_JOBS).select("*")
+            if status_filter is not None:
+                query = query.eq("status", status_filter)
+            response = query.order("created_at", desc=True).execute()
+            return response.data or []
+        except APIError as exc:
+            logger.error("Supabase list_jobs failed", extra={"error": str(exc)})
+            raise
+
+    def recover_orphaned_jobs(self) -> int:
+        """Transition all RUNNING jobs to FAILED on server startup.
+
+        Called once during application lifespan startup to clean up jobs that
+        were left in RUNNING state by a previous server process that was killed
+        without graceful shutdown.
+
+        Uses a per-job conditional UPDATE: each row is only updated if it is
+        still in RUNNING state at the time of the write, preventing overwrites
+        of jobs that reached a terminal state between the initial list and the
+        update.
+
+        Individual APIError failures are caught, logged, and skipped so that
+        one problematic row does not prevent recovery of the remaining jobs.
+
+        Returns:
+            Count of jobs successfully transitioned to FAILED.
+        """
+        running = self.list_jobs(status_filter=JobStatus.RUNNING.value)
+        if not running:
+            return 0
+
+        now = datetime.now(timezone.utc).isoformat()
+        recovered = 0
+
+        for job in running:
+            job_id = job["job_id"]
+            try:
+                response = (
+                    self._client.table(_TABLE_JOBS)
+                    .update({
+                        "status": JobStatus.FAILED.value,
+                        "completed_at": now,
+                        "error_message": ORPHAN_RECOVERY_ERROR_MESSAGE,
+                        "error_type": "OrphanedJobError",
+                    })
+                    .eq("job_id", job_id)
+                    .eq("status", JobStatus.RUNNING.value)
+                    .execute()
+                )
+                if response.data:
+                    recovered += 1
+                    logger.warning(
+                        "Orphaned job recovered",
+                        extra={"job_id": job_id},
+                    )
+                else:
+                    logger.info(
+                        "Orphaned job skipped (status changed before recovery)",
+                        extra={"job_id": job_id},
+                    )
+            except APIError as exc:
+                logger.error(
+                    "Failed to recover orphaned job",
+                    extra={"job_id": job_id, "error": str(exc)},
+                )
+
+        return recovered

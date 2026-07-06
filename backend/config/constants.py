@@ -135,3 +135,13 @@ MAX_RECOMMENDATIONS: int = 15
 """Maximum number of recommendations per analysis job.
 All P1 items are preserved first, then P2, then P3. Lowest-priority items are
 dropped when the total count exceeds this cap."""
+
+# ---------------------------------------------------------------------------
+# Job lifecycle
+# ---------------------------------------------------------------------------
+
+ORPHAN_RECOVERY_ERROR_MESSAGE: str = (
+    "Job interrupted: server restarted while job was RUNNING."
+)
+"""Error message written to Supabase when a RUNNING job is recovered on
+server startup. Recorded as error_message in the FAILED job record."""

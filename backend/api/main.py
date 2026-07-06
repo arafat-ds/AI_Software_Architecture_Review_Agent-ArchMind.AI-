@@ -10,6 +10,7 @@ safely importable without environment variables, which is required for tests.
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -28,8 +29,26 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: configure logging on startup, clean up on shutdown."""
+    """Application lifespan: configure logging, recover orphaned jobs, clean up on shutdown."""
     configure_logging()
+    try:
+        t0 = time.monotonic()
+        recovered = get_supabase_client().recover_orphaned_jobs()
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.info(
+            "Startup orphan recovery complete",
+            extra={"recovered": recovered, "elapsed_ms": elapsed_ms},
+        )
+        if recovered:
+            logger.warning(
+                "Orphaned jobs recovered on startup",
+                extra={"count": recovered},
+            )
+    except Exception as exc:
+        logger.critical(
+            "Startup orphan recovery failed — server continuing",
+            extra={"error": str(exc)},
+        )
     yield
     shutdown_executor()
 
