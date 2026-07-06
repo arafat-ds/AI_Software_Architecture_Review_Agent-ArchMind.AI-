@@ -1,6 +1,6 @@
 """Unit tests for the jobs router.
 
-Covers POST /jobs and GET /jobs/{job_id}.
+Covers POST /jobs, GET /jobs, and GET /jobs/{job_id}.
 Each test creates an isolated FastAPI test app with dependency overrides
 for get_orchestrator, get_executor, and get_supabase_client.
 No real Supabase or ThreadPoolExecutor is used.
@@ -8,12 +8,13 @@ No real Supabase or ThreadPoolExecutor is used.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 
 from api.routers.jobs import get_executor, get_orchestrator, get_supabase_client, router
 
@@ -267,3 +268,121 @@ def test_get_job_status_complete_includes_report_id():
     client = _make_client(mock_supabase=mock_supabase)
     resp = client.get(f"/jobs/{_JOB_ID}")
     assert resp.json()["report_id"] == _REPORT_ID
+
+
+# ---------------------------------------------------------------------------
+# GET /jobs — list all jobs
+# ---------------------------------------------------------------------------
+
+
+def test_list_jobs_returns_200():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = [_pending_job_dict()]
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs")
+    assert resp.status_code == 200
+
+
+def test_list_jobs_response_is_list():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = [_pending_job_dict()]
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs")
+    assert isinstance(resp.json(), list)
+
+
+def test_list_jobs_returns_empty_list_when_no_jobs():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = []
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_jobs_response_items_have_correct_shape():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = [_pending_job_dict()]
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs")
+    item = resp.json()[0]
+    assert item["job_id"] == _JOB_ID
+    assert item["status"] == "PENDING"
+    assert item["repo_url"] == _VALID_URL
+
+
+def test_list_jobs_response_items_exclude_schema_version():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = [_pending_job_dict()]
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs")
+    assert "schema_version" not in resp.json()[0]
+
+
+def test_list_jobs_calls_list_jobs_not_get_job():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = []
+    client = _make_client(mock_supabase=mock_supabase)
+    client.get("/jobs")
+    mock_supabase.list_jobs.assert_called_once()
+    mock_supabase.get_job.assert_not_called()
+
+
+def test_list_jobs_no_filter_passes_none_to_supabase():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = []
+    client = _make_client(mock_supabase=mock_supabase)
+    client.get("/jobs")
+    mock_supabase.list_jobs.assert_called_once_with(status_filter=None)
+
+
+def test_list_jobs_with_status_filter_passes_value_to_supabase():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = []
+    client = _make_client(mock_supabase=mock_supabase)
+    client.get("/jobs?status=RUNNING")
+    mock_supabase.list_jobs.assert_called_once_with(status_filter="RUNNING")
+
+
+def test_list_jobs_with_valid_status_returns_200():
+    mock_supabase = MagicMock()
+    mock_supabase.list_jobs.return_value = []
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs?status=COMPLETE")
+    assert resp.status_code == 200
+
+
+def test_list_jobs_with_invalid_status_returns_422():
+    mock_supabase = MagicMock()
+    client = _make_client(mock_supabase=mock_supabase)
+    resp = client.get("/jobs?status=BOGUS")
+    assert resp.status_code == 422
+
+
+def test_list_jobs_api_error_returns_json_500():
+    """APIError from list_jobs() must propagate through the global exception handler as JSON 500."""
+    from api.main import create_app
+
+    mock_settings = MagicMock()
+    mock_settings.cors_origins = ["http://localhost:3000"]
+
+    mock_startup_supabase = MagicMock()
+    mock_startup_supabase.recover_orphaned_jobs.return_value = 0
+
+    mock_request_supabase = MagicMock()
+    mock_request_supabase.list_jobs.side_effect = APIError(
+        {"message": "db error", "code": "PGRST000"}
+    )
+
+    with patch("api.main.get_settings", return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_startup_supabase), \
+         patch("api.main.shutdown_executor"):
+        app = create_app()
+
+    app.dependency_overrides[get_supabase_client] = lambda: mock_request_supabase
+
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/api/v1/jobs")
+    assert resp.status_code == 500
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json() == {"detail": "Internal server error."}

@@ -10,11 +10,12 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.schemas.job_schemas import JobStatusResponse, JobSubmittedResponse, SubmitJobRequest
 from infrastructure.supabase_client import SupabaseClient
 from services.orchestrator import AnalysisOrchestrator
+from shared.types.enums import JobStatus
 
 router = APIRouter(tags=["jobs"])
 
@@ -47,6 +48,16 @@ async def submit_job(
         status="PENDING",
         message="Analysis queued. Poll GET /jobs/{job_id} for status.",
     )
+
+
+@router.get("/jobs", response_model=list[JobStatusResponse])
+async def list_jobs(
+    status: JobStatus | None = Query(default=None),
+    supabase: SupabaseClient = Depends(get_supabase_client),
+) -> list[JobStatusResponse]:
+    status_filter = status.value if status is not None else None
+    rows = supabase.list_jobs(status_filter=status_filter)
+    return [JobStatusResponse.model_validate(row) for row in rows]
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
