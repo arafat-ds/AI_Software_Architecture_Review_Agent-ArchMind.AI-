@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import pytest
 
+from infrastructure.gemini_client import GenerationResult
 from services.recommendation_agent.recommendation_service import RecommendationService
 from shared.types.enums import (
     ArchitecturePattern,
@@ -218,7 +219,7 @@ def test_service_run_with_rag_context_passes_excerpt_to_gemini():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     service.run(
         architecture_section=arch,
@@ -240,7 +241,7 @@ def test_service_run_with_rag_context_shows_kb_context_header_in_prompt():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     service.run(
         architecture_section=arch,
@@ -267,7 +268,7 @@ def test_service_run_with_rag_context_sets_rag_chunk_ids_used_on_recommendation(
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,
@@ -287,7 +288,7 @@ def test_service_run_rag_chunks_used_count_nonzero_when_context_provided():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,
@@ -313,7 +314,7 @@ def test_service_run_with_rag_context_no_chunk_match_gives_empty_ids():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,
@@ -334,7 +335,7 @@ def test_service_run_with_rag_context_no_match_shows_none_retrieved_in_prompt():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     service.run(
         architecture_section=arch,
@@ -357,7 +358,7 @@ def test_service_run_with_rag_context_none_succeeds():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,
@@ -374,7 +375,7 @@ def test_service_run_with_rag_context_none_gives_empty_chunk_ids():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,
@@ -391,7 +392,7 @@ def test_service_run_with_rag_context_none_shows_none_retrieved_in_prompt():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001"]), input_tokens=0, output_tokens=0)
 
     service.run(
         architecture_section=arch,
@@ -432,7 +433,7 @@ def test_service_run_mixed_rag_coverage_per_finding():
     sec = _make_sec_section()
 
     service, mock_gemini = _make_service()
-    mock_gemini.generate.return_value = _make_valid_llm_response(["REC-001", "REC-002"])
+    mock_gemini.generate.return_value = GenerationResult(text=_make_valid_llm_response(["REC-001", "REC-002"]), input_tokens=0, output_tokens=0)
 
     section = service.run(
         architecture_section=arch,

@@ -79,7 +79,9 @@ def main() -> None:
         t0 = time.perf_counter()
         response = client.generate(prompt=_GENERATE_PROMPT)
         latency = time.perf_counter() - t0
-        print(f"[PASS] Response  : {response.strip()!r}")
+        print(f"[PASS] Response  : {response.text.strip()!r}")
+        print(f"       Tokens in : {response.input_tokens}")
+        print(f"       Tokens out: {response.output_tokens}")
         print(f"       Latency   : {latency:.2f}s")
     except Exception as exc:
         print(f"[FAIL] generate() raised: {type(exc).__name__}: {exc}")

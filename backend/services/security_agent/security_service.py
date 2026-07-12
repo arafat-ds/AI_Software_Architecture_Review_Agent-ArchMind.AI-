@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from config.constants import DISCLAIMER_TEXT
-from infrastructure.gemini_client import GeminiClient
+from infrastructure.gemini_client import GeminiClient, GenerationResult
 from services.security_agent.prompt_builder import (
     SYSTEM_PROMPT,
     build_security_prompt,
@@ -73,11 +73,11 @@ class SecurityService:
 
         logger.debug("SecurityService: calling Gemini", extra={"job_id": str(pcr.job_id)})
         gen_timestamp = datetime.now(tz=timezone.utc)
-        response_text = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
+        result = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
 
-        llm_data = self._parse_response(response_text, finding_specs)
+        llm_data = self._parse_response(result.text, finding_specs)
 
-        section = self._assemble_section(pcr, finding_specs, llm_data, gen_timestamp)
+        section = self._assemble_section(pcr, finding_specs, llm_data, gen_timestamp, result)
 
         logger.debug("SecurityService: section assembled", extra={
             "job_id": str(pcr.job_id),
@@ -143,6 +143,7 @@ class SecurityService:
         finding_specs: list[FindingSpec],
         llm_data: dict,
         gen_timestamp: datetime,
+        result: GenerationResult,
     ) -> SecuritySection:
         findings = _build_findings(finding_specs, llm_data, self._model_id)
         overall_risk = _compute_overall_risk(findings)
@@ -150,8 +151,8 @@ class SecurityService:
 
         metadata = GenerationMetadata(
             model_id=self._model_id,
-            input_token_count=0,
-            output_token_count=0,
+            input_token_count=result.input_tokens,
+            output_token_count=result.output_tokens,
             generation_timestamp=gen_timestamp,
             retry_count=0,
         )

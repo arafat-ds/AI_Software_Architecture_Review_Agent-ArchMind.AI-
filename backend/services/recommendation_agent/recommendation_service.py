@@ -20,7 +20,7 @@ import re
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from infrastructure.gemini_client import GeminiClient
+from infrastructure.gemini_client import GeminiClient, GenerationResult
 from services.recommendation_agent.prompt_builder import (
     SYSTEM_PROMPT,
     build_recommendation_prompt,
@@ -93,11 +93,11 @@ class RecommendationService:
             "job_id": str(architecture_section.job_id),
         })
         gen_timestamp = datetime.now(tz=timezone.utc)
-        response_text = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
+        result = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
 
-        llm_data = self._parse_response(response_text, rule_output)
+        llm_data = self._parse_response(result.text, rule_output)
         section = self._assemble_section(
-            rule_output, llm_data, gen_timestamp, architecture_section.job_id
+            rule_output, llm_data, gen_timestamp, architecture_section.job_id, result
         )
 
         logger.debug("RecommendationService: section assembled", extra={
@@ -174,6 +174,7 @@ class RecommendationService:
         llm_data: dict,
         gen_timestamp: datetime,
         job_id: UUID,
+        result: GenerationResult,
     ) -> RecommendationSection:
         recommendations = self._build_recommendations(
             rule_output.specs, llm_data["recommendations"]
@@ -181,8 +182,8 @@ class RecommendationService:
 
         metadata = GenerationMetadata(
             model_id=self._model_id,
-            input_token_count=0,
-            output_token_count=0,
+            input_token_count=result.input_tokens,
+            output_token_count=result.output_tokens,
             generation_timestamp=gen_timestamp,
             retry_count=0,
         )

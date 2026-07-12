@@ -16,7 +16,7 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from infrastructure.gemini_client import GeminiClient
+from infrastructure.gemini_client import GeminiClient, GenerationResult
 from services.architecture_agent.prompt_builder import (
     SYSTEM_PROMPT,
     build_architecture_prompt,
@@ -72,11 +72,11 @@ class ArchitectureService:
 
         logger.debug("ArchitectureService: calling Gemini", extra={"job_id": str(pcr.job_id)})
         gen_timestamp = datetime.now(tz=timezone.utc)
-        response_text = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
+        result = self._gemini.generate(prompt=prompt, system_prompt=SYSTEM_PROMPT)
 
-        llm_data = self._parse_response(response_text)
+        llm_data = self._parse_response(result.text)
 
-        section = self._assemble_section(pcr, rule_output, llm_data, gen_timestamp)
+        section = self._assemble_section(pcr, rule_output, llm_data, gen_timestamp, result)
 
         logger.debug("ArchitectureService: section assembled", extra={
             "job_id": str(pcr.job_id),
@@ -153,6 +153,7 @@ class ArchitectureService:
         rule_output: ArchitectureRuleOutput,
         llm_data: dict,
         gen_timestamp: datetime,
+        result: GenerationResult,
     ) -> ArchitectureSection:
         weaknesses = _build_weaknesses(rule_output.weakness_specs, llm_data)
 
@@ -165,8 +166,8 @@ class ArchitectureService:
 
         metadata = GenerationMetadata(
             model_id=self._model_id,
-            input_token_count=0,
-            output_token_count=0,
+            input_token_count=result.input_tokens,
+            output_token_count=result.output_tokens,
             generation_timestamp=gen_timestamp,
             retry_count=0,
         )

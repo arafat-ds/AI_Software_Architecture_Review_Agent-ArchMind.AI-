@@ -10,6 +10,7 @@ logic is contained here.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 
 import google.genai as genai
 import google.genai.types as genai_types
@@ -36,6 +37,19 @@ _RETRYABLE_EXCEPTIONS = (ResourceExhausted, InternalServerError, ServiceUnavaila
 _BACKOFF_BASE_SECONDS: float = 2.0
 
 
+@dataclass(frozen=True)
+class GenerationResult:
+    """Return value of GeminiClient.generate().
+
+    Bundles the generated text with token usage from usage_metadata.
+    Token counts are 0 when usage_metadata is absent or its fields are None.
+    """
+
+    text: str
+    input_tokens: int
+    output_tokens: int
+
+
 class GeminiClient:
     """Thin wrapper around the Google Gemini API.
 
@@ -60,7 +74,7 @@ class GeminiClient:
         self._max_output_tokens = max_output_tokens
         self._max_retries = max_retries
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None) -> GenerationResult:
         """Generate text from a prompt.
 
         Args:
@@ -68,7 +82,7 @@ class GeminiClient:
             system_prompt: Optional system instruction for the model.
 
         Returns:
-            Generated text string.
+            GenerationResult with generated text and token usage counts.
 
         Raises:
             TokenLimitExceededError: Input exceeds the model's token limit.
@@ -92,11 +106,20 @@ class GeminiClient:
                     config=config,
                 )
                 text = _extract_text(response, self._generation_model)
+                usage = response.usage_metadata
+                input_tokens = (usage.prompt_token_count or 0) if usage else 0
+                output_tokens = (usage.candidates_token_count or 0) if usage else 0
                 logger.debug("Gemini generate OK", extra={
                     "model": self._generation_model,
                     "attempt": attempt,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
                 })
-                return text
+                return GenerationResult(
+                    text=text,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
 
             except ResourceExhausted as exc:
                 retry_after = _parse_retry_after(exc)
