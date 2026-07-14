@@ -44,3 +44,67 @@ def test_health_response_body_matches_schema():
     # Raises ValidationError if contract is broken
     model = HealthResponse.model_validate(resp.json())
     assert model.status == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Dependency status (M6)
+# ---------------------------------------------------------------------------
+
+
+def _client_with_state(**state_kwargs) -> "TestClient":
+    """Create a fresh test client with specific app.state values."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from api.routers.health import router as health_router
+    app = FastAPI()
+    app.include_router(health_router)
+    for key, value in state_kwargs.items():
+        setattr(app.state, key, value)
+    return TestClient(app)
+
+
+def test_health_response_dependencies_key_present():
+    resp = _client.get("/health")
+    assert "dependencies" in resp.json()
+
+
+def test_health_response_dependencies_unknown_when_no_state():
+    resp = _client.get("/health")
+    deps = resp.json()["dependencies"]
+    assert deps["gemini"] == "unknown"
+    assert deps["qdrant"] == "unknown"
+    assert deps["supabase"] == "unknown"
+
+
+def test_health_response_dependencies_reflect_app_state():
+    client = _client_with_state(
+        gemini_status="ok",
+        qdrant_status="ok",
+        supabase_status="ok",
+    )
+    deps = client.get("/health").json()["dependencies"]
+    assert deps["gemini"] == "ok"
+    assert deps["qdrant"] == "ok"
+    assert deps["supabase"] == "ok"
+
+
+def test_health_response_gemini_degraded_still_returns_200():
+    client = _client_with_state(
+        gemini_status="failed",
+        qdrant_status="ok",
+        supabase_status="ok",
+    )
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["dependencies"]["gemini"] == "failed"
+
+
+def test_health_response_qdrant_degraded_still_returns_200():
+    client = _client_with_state(
+        gemini_status="ok",
+        qdrant_status="unreachable",
+        supabase_status="ok",
+    )
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["dependencies"]["qdrant"] == "unreachable"

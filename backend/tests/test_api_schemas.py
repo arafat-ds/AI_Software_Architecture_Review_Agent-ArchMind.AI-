@@ -389,3 +389,30 @@ def test_health_response_version_present():
 def test_health_response_requires_both_fields():
     with pytest.raises(ValidationError):
         HealthResponse(status="ok")
+
+
+# ---------------------------------------------------------------------------
+# DependencyStatus (M6)
+# ---------------------------------------------------------------------------
+
+
+def test_dependency_status_constructs_with_all_fields():
+    from api.schemas.health_schemas import DependencyStatus
+    ds = DependencyStatus(gemini="ok", qdrant="ok", supabase="ok")
+    assert ds.gemini == "ok"
+    assert ds.qdrant == "ok"
+    assert ds.supabase == "ok"
+
+
+def test_health_response_dependencies_defaults_to_unknown():
+    resp = HealthResponse(status="ok", version="1.0")
+    assert resp.dependencies.gemini == "unknown"
+    assert resp.dependencies.qdrant == "unknown"
+    assert resp.dependencies.supabase == "unknown"
+
+
+def test_health_response_accepts_explicit_dependency_status():
+    from api.schemas.health_schemas import DependencyStatus
+    ds = DependencyStatus(gemini="ok", qdrant="collection_missing", supabase="ok")
+    resp = HealthResponse(status="ok", version="1.0", dependencies=ds)
+    assert resp.dependencies.qdrant == "collection_missing"

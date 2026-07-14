@@ -32,8 +32,15 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: configure logging, recover orphaned jobs, clean up on shutdown."""
+    """Application lifespan: configure logging, recover orphaned jobs, run connectivity probes, clean up on shutdown."""
     configure_logging()
+
+    # Default probe state — updated by each probe block below
+    app.state.supabase_status = "unknown"
+    app.state.gemini_status = "unknown"
+    app.state.qdrant_status = "unknown"
+
+    # Supabase: orphan recovery doubles as the connectivity probe
     try:
         t0 = time.monotonic()
         recovered = get_supabase_client().recover_orphaned_jobs()
@@ -47,11 +54,13 @@ async def lifespan(app: FastAPI):
                 "Orphaned jobs recovered on startup",
                 extra={"count": recovered},
             )
+        app.state.supabase_status = "ok"
     except Exception as exc:
         logger.critical(
             "Startup orphan recovery failed — server continuing",
             extra={"error": str(exc)},
         )
+        app.state.supabase_status = "failed"
 
     # Gemini connectivity probe — non-fatal
     try:
@@ -66,10 +75,13 @@ async def lifespan(app: FastAPI):
         )
         if _gemini_probe.probe():
             logger.info("Gemini connectivity probe: OK", extra={"model": _settings.gemini_model})
+            app.state.gemini_status = "ok"
         else:
             logger.warning("Gemini connectivity probe: FAILED", extra={"model": _settings.gemini_model})
+            app.state.gemini_status = "failed"
     except Exception as exc:
         logger.warning("Gemini probe failed", extra={"error": str(exc)})
+        app.state.gemini_status = "failed"
 
     # Qdrant connectivity + collection probe — non-fatal, distinct failure modes
     try:
@@ -78,6 +90,7 @@ async def lifespan(app: FastAPI):
         _exists = _qdrant_probe.collection_exists(_settings.qdrant_collection_name)
         if _exists:
             logger.info("Qdrant probe: OK", extra={"collection": _settings.qdrant_collection_name})
+            app.state.qdrant_status = "ok"
         else:
             logger.warning(
                 "Qdrant collection missing — knowledge base not loaded",
@@ -86,13 +99,16 @@ async def lifespan(app: FastAPI):
                     "qdrant_status": "collection_missing",
                 },
             )
+            app.state.qdrant_status = "collection_missing"
     except QdrantConnectionError as exc:
         logger.warning(
             "Qdrant connectivity probe: FAILED",
             extra={"qdrant_status": "unreachable", "error": str(exc)},
         )
+        app.state.qdrant_status = "unreachable"
     except Exception as exc:
         logger.warning("Qdrant probe failed", extra={"error": str(exc)})
+        app.state.qdrant_status = "failed"
 
     yield
     shutdown_executor()

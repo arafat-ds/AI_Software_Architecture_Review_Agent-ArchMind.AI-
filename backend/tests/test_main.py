@@ -315,3 +315,120 @@ def test_startup_qdrant_collection_missing_does_not_crash_server(mock_settings):
         with TestClient(app) as client:
             resp = client.get("/api/v1/health")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Startup: app.state probe result storage (M6)
+# ---------------------------------------------------------------------------
+
+
+def test_startup_sets_supabase_status_ok_when_recovery_succeeds(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.supabase_status == "ok"
+
+
+def test_startup_sets_supabase_status_failed_when_recovery_raises(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.side_effect = Exception("db down")
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.supabase_status == "failed"
+
+
+def test_startup_sets_gemini_status_ok_when_probe_succeeds(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.gemini_status == "ok"
+
+
+def test_startup_sets_gemini_status_failed_when_probe_fails(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = False
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.gemini_status == "failed"
+
+
+def test_startup_sets_qdrant_status_ok_when_collection_exists(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.qdrant_status == "ok"
+
+
+def test_startup_sets_qdrant_status_collection_missing(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = False
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.qdrant_status == "collection_missing"
+
+
+def test_startup_sets_qdrant_status_unreachable_when_connection_fails(mock_settings):
+    from shared.exceptions.rag_exceptions import QdrantConnectionError as _QCE
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient", side_effect=_QCE(host="localhost", port=6333, reason="refused")), \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    assert app.state.qdrant_status == "unreachable"
