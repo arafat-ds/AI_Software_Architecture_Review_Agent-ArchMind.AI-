@@ -159,6 +159,23 @@ class GeminiClient:
             last_error=str(last_exc),
         )
 
+    def probe(self) -> bool:
+        """Check Gemini API reachability via a zero-token models.get() call.
+
+        Validates the API key and generation model without generating content.
+        Returns True if reachable, False on any failure. Never raises.
+        """
+        try:
+            self._client.models.get(model=self._generation_model)
+            logger.debug("Gemini probe OK", extra={"model": self._generation_model})
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Gemini probe failed",
+                extra={"model": self._generation_model, "error": str(exc)},
+            )
+            return False
+
     def embed(self, text: str) -> list[float]:
         """Embed a single text string into a vector.
 

@@ -22,6 +22,9 @@ from api.routers import health
 from api.routers import jobs as jobs_router
 from api.routers import reports as reports_router
 from config.settings import get_settings
+from infrastructure.gemini_client import GeminiClient
+from infrastructure.qdrant_client import QdrantClient
+from shared.exceptions.rag_exceptions import QdrantConnectionError
 from shared.logging.logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -49,6 +52,48 @@ async def lifespan(app: FastAPI):
             "Startup orphan recovery failed — server continuing",
             extra={"error": str(exc)},
         )
+
+    # Gemini connectivity probe — non-fatal
+    try:
+        _settings = get_settings()
+        _gemini_probe = GeminiClient(
+            api_key=_settings.gemini_api_key,
+            generation_model=_settings.gemini_model,
+            embedding_model=_settings.gemini_embedding_model,
+            temperature=0.0,
+            max_output_tokens=1,
+            max_retries=0,
+        )
+        if _gemini_probe.probe():
+            logger.info("Gemini connectivity probe: OK", extra={"model": _settings.gemini_model})
+        else:
+            logger.warning("Gemini connectivity probe: FAILED", extra={"model": _settings.gemini_model})
+    except Exception as exc:
+        logger.warning("Gemini probe failed", extra={"error": str(exc)})
+
+    # Qdrant connectivity + collection probe — non-fatal, distinct failure modes
+    try:
+        _settings = get_settings()
+        _qdrant_probe = QdrantClient(host=_settings.qdrant_host, port=_settings.qdrant_port)
+        _exists = _qdrant_probe.collection_exists(_settings.qdrant_collection_name)
+        if _exists:
+            logger.info("Qdrant probe: OK", extra={"collection": _settings.qdrant_collection_name})
+        else:
+            logger.warning(
+                "Qdrant collection missing — knowledge base not loaded",
+                extra={
+                    "collection": _settings.qdrant_collection_name,
+                    "qdrant_status": "collection_missing",
+                },
+            )
+    except QdrantConnectionError as exc:
+        logger.warning(
+            "Qdrant connectivity probe: FAILED",
+            extra={"qdrant_status": "unreachable", "error": str(exc)},
+        )
+    except Exception as exc:
+        logger.warning("Qdrant probe failed", extra={"error": str(exc)})
+
     yield
     shutdown_executor()
 

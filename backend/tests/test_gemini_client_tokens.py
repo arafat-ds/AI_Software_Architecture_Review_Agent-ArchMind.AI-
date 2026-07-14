@@ -132,3 +132,20 @@ def test_generate_result_is_frozen_dataclass():
     result = GenerationResult(text="hello", input_tokens=10, output_tokens=5)
     with pytest.raises((AttributeError, TypeError)):
         result.input_tokens = 99  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# GeminiClient.probe()
+# ---------------------------------------------------------------------------
+
+
+def test_probe_returns_true_when_models_get_succeeds():
+    client, mock_inner = _make_client()
+    mock_inner.models.get.return_value = MagicMock()
+    assert client.probe() is True
+
+
+def test_probe_returns_false_when_models_get_raises():
+    client, mock_inner = _make_client()
+    mock_inner.models.get.side_effect = Exception("invalid API key")
+    assert client.probe() is False

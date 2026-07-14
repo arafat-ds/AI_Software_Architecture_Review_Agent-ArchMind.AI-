@@ -76,7 +76,11 @@ def test_reports_route_registered_at_api_v1(test_app):
 def test_configure_logging_called_on_startup(mock_settings):
     with patch(_SETTINGS_PATCH, return_value=mock_settings), \
          patch("api.main.configure_logging") as mock_configure, \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
          patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
         app = create_app()
         with TestClient(app):
             mock_configure.assert_called_once()
@@ -201,7 +205,11 @@ def test_startup_calls_recover_orphaned_jobs(mock_settings):
     mock_supabase.recover_orphaned_jobs.return_value = 0
     with patch(_SETTINGS_PATCH, return_value=mock_settings), \
          patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
          patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
         app = create_app()
         with TestClient(app):
             pass
@@ -213,7 +221,96 @@ def test_startup_orphan_recovery_failure_does_not_crash_server(mock_settings):
     mock_supabase.recover_orphaned_jobs.side_effect = Exception("supabase down")
     with patch(_SETTINGS_PATCH, return_value=mock_settings), \
          patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
          patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Startup: connectivity probes (M5)
+# ---------------------------------------------------------------------------
+
+
+def test_startup_runs_gemini_probe(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    mock_gemini_cls.return_value.probe.assert_called_once()
+
+
+def test_startup_runs_qdrant_probe(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app):
+            pass
+    mock_qdrant_cls.return_value.collection_exists.assert_called_once()
+
+
+def test_startup_gemini_probe_failure_does_not_crash_server(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = False
+        mock_qdrant_cls.return_value.collection_exists.return_value = True
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+
+
+def test_startup_qdrant_unreachable_does_not_crash_server(mock_settings):
+    from shared.exceptions.rag_exceptions import QdrantConnectionError as _QCE
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient", side_effect=_QCE(host="localhost", port=6333, reason="refused")), \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+
+
+def test_startup_qdrant_collection_missing_does_not_crash_server(mock_settings):
+    mock_supabase = MagicMock()
+    mock_supabase.recover_orphaned_jobs.return_value = 0
+    with patch(_SETTINGS_PATCH, return_value=mock_settings), \
+         patch("api.main.get_supabase_client", return_value=mock_supabase), \
+         patch("api.main.GeminiClient") as mock_gemini_cls, \
+         patch("api.main.QdrantClient") as mock_qdrant_cls, \
+         patch("api.main.shutdown_executor"):
+        mock_gemini_cls.return_value.probe.return_value = True
+        mock_qdrant_cls.return_value.collection_exists.return_value = False
         app = create_app()
         with TestClient(app) as client:
             resp = client.get("/api/v1/health")
