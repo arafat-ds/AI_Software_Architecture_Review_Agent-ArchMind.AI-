@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
+from api.security import require_auth
 
 _SETTINGS_PATCH = "api.main.get_settings"
 
@@ -176,6 +177,7 @@ def test_exception_handler_does_not_intercept_422(mock_settings):
     from api.routers import jobs as jobs_router
     app.dependency_overrides[jobs_router.get_orchestrator] = lambda: MagicMock()
     app.dependency_overrides[jobs_router.get_executor] = lambda: MagicMock()
+    app.dependency_overrides[require_auth] = lambda: None
     client = TestClient(app)
     resp = client.post("/api/v1/jobs", json={"repo_url": "https://gitlab.com/owner/repo"})
     assert resp.status_code == 422
@@ -189,6 +191,7 @@ def test_exception_handler_does_not_intercept_404(mock_settings):
     mock_supabase = MagicMock()
     mock_supabase.get_job.return_value = None
     app.dependency_overrides[jobs_router.get_supabase_client] = lambda: mock_supabase
+    app.dependency_overrides[require_auth] = lambda: None
     client = TestClient(app)
     resp = client.get(f"/api/v1/jobs/{uuid4()}")
     assert resp.status_code == 404

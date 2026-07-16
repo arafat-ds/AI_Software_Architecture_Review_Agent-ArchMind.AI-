@@ -108,3 +108,26 @@ def test_health_response_qdrant_degraded_still_returns_200():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["dependencies"]["qdrant"] == "unreachable"
+
+
+# ---------------------------------------------------------------------------
+# Auth exemption — health must remain unauthenticated (M9.1)
+# ---------------------------------------------------------------------------
+
+
+def test_health_returns_200_without_api_key_header():
+    """Health endpoint is unauthenticated; absent key must not block it."""
+    resp = _client.get("/health")
+    assert resp.status_code == 200
+
+
+def test_health_returns_200_when_wrong_api_key_provided():
+    """Health endpoint ignores X-API-Key entirely — wrong key must not block it."""
+    resp = _client.get("/health", headers={"X-API-Key": "wrong-key-should-be-ignored"})
+    assert resp.status_code == 200
+
+
+def test_health_returns_200_when_empty_api_key_provided():
+    """Health endpoint ignores an empty X-API-Key header."""
+    resp = _client.get("/health", headers={"X-API-Key": ""})
+    assert resp.status_code == 200

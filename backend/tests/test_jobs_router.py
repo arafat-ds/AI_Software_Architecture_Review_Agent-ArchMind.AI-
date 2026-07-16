@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
 from api.routers.jobs import get_executor, get_orchestrator, get_supabase_client, router
+from api.security import require_auth
 
 _JOB_ID = str(uuid4())
 _REPORT_ID = str(uuid4())
@@ -380,6 +381,7 @@ def test_list_jobs_api_error_returns_json_500():
         app = create_app()
 
     app.dependency_overrides[get_supabase_client] = lambda: mock_request_supabase
+    app.dependency_overrides[require_auth] = lambda: None
 
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.get("/api/v1/jobs")

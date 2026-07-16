@@ -13,12 +13,13 @@ from __future__ import annotations
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.dependencies import get_executor, get_orchestrator, get_supabase_client, shutdown_executor
 from api.routers import health
+from api.security import require_auth
 from api.routers import jobs as jobs_router
 from api.routers import reports as reports_router
 from config.settings import get_settings
@@ -155,8 +156,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix="/api/v1")
-    app.include_router(jobs_router.router, prefix="/api/v1")
-    app.include_router(reports_router.router, prefix="/api/v1")
+    app.include_router(jobs_router.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
+    app.include_router(reports_router.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 
     app.dependency_overrides[jobs_router.get_supabase_client] = get_supabase_client
     app.dependency_overrides[jobs_router.get_orchestrator] = get_orchestrator

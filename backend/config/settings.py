@@ -86,6 +86,20 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # API authentication
+    # ------------------------------------------------------------------
+
+    api_key: str = Field(
+        ...,
+        description=(
+            "Static API key for authenticating all protected API endpoints. "
+            "Required. Never logged or exposed in responses. "
+            "Must be at least 32 characters. "
+            'Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        ),
+    )
+
+    # ------------------------------------------------------------------
     # API / CORS
     # ------------------------------------------------------------------
 
@@ -141,6 +155,18 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def validate_api_key(cls, value: str) -> str:
+        """Ensure the API key meets minimum length for adequate entropy."""
+        key = str(value).strip()
+        if len(key) < 32:
+            raise ValueError(
+                "api_key must be at least 32 characters. "
+                'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return key
 
     @field_validator("log_level", mode="before")
     @classmethod
