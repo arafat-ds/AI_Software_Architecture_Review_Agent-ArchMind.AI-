@@ -1,0 +1,53 @@
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:v0.11.0
+    container_name: archmind_openwebui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+      - ../branding/custom.css:/app/backend/open_webui/static/custom.css:ro
+    env_file:
+      - ../configs/openwebui.env
+    environment:
+      # These override env_file values to keep non-secrets visible in compose
+      - WEBUI_NAME=ArchMind AI
+      - ENABLE_SIGNUP=false
+      - DEFAULT_MODELS=archmind_ai
+      - OPENAI_API_BASE_URL=http://pipelines:9099
+      - OPENAI_API_KEY=0p3n-w3bu!
+      - ENABLE_OLLAMA_API=false
+    depends_on:
+      pipelines:
+        condition: service_healthy
+    networks:
+      - frontend_net
+
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:git-039f9c5
+    container_name: archmind_pipelines
+    restart: unless-stopped
+    ports:
+      - "9099:9099"
+    volumes:
+      - ../pipelines:/app/pipelines
+    env_file:
+      - ../configs/pipelines.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - frontend_net
+
+networks:
+  frontend_net:
+    name: archmind_frontend_net
+    driver: bridge
+
+volumes:
+  openwebui_data:
+    name: archmind_openwebui_data

@@ -4,5 +4,11 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .env
+frontend/configs/openwebui.env
+frontend/configs/pipelines.env
 .DS_Store
 .claude/
+
+# Pipelines server runtime artifacts (created on container start)
+frontend/pipelines/*/
+frontend/pipelines/failed/

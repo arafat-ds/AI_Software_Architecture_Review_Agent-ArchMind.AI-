@@ -1,0 +1,23 @@
+/* ArchMind AI — OpenWebUI login page branding overrides (v0.11.0) */
+
+/* 1. Hide the small OpenWebUI favicon logo in the top-left corner of the auth page.
+ * The logo lives in a fixed/m-10/z-50 container that is a direct child of #auth-page. */
+#auth-page > .fixed.m-10 {
+    display: none !important;
+}
+
+/* 2. Remove the "(Open WebUI)" suffix from the login heading.
+ * The backend appends "(Open WebUI)" to WEBUI_NAME when it differs from the default.
+ * We suppress the rendered text (font-size: 0) and inject the correct heading text
+ * via a ::before pseudo-element. The ::before explicit font-size overrides inheritance. */
+#auth-login-card .text-2xl {
+    font-size: 0 !important;
+}
+
+#auth-login-card .text-2xl::before {
+    content: 'Sign in to ArchMind AI';
+    display: block;
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 400;
+}

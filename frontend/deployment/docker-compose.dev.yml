@@ -1,0 +1,9 @@
+services:
+  openwebui:
+    environment:
+      - WEBUI_AUTH=false
+      - ENABLE_SIGNUP=false
+
+  pipelines:
+    volumes:
+      - ../pipelines:/app/pipelines

@@ -1,0 +1,5 @@
+<!-- PLACEHOLDER — replace with final ArchMind AI hexagon + wordmark SVG from designer -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <polygon points="30,5 55,19 55,41 30,55 5,41 5,19" fill="#6366F1" stroke="#4F46E5" stroke-width="1.5"/>
+  <text x="68" y="38" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#6366F1">ArchMind AI</text>
+</svg>
