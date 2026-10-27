@@ -30,6 +30,12 @@ _EXCLUDED_DIRS: frozenset[str] = frozenset({
     "vendor", ".mypy_cache", ".pytest_cache", ".ruff_cache",
 })
 
+# Extensions with an installed Tree-sitter grammar — must stay in sync with
+# _PARSEABLE_EXTENSIONS in services/parser/file_parser.py.
+_GRAMMAR_SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".go",
+})
+
 _EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".py": "Python", ".ts": "TypeScript", ".tsx": "TypeScript",
     ".js": "JavaScript", ".jsx": "JavaScript", ".go": "Go",
@@ -89,11 +95,15 @@ def build_manifest(
                 continue
 
             is_supported = ext in SUPPORTED_EXTENSIONS
+            has_grammar = ext in _GRAMMAR_SUPPORTED_EXTENSIONS
             exceeds_size = size_bytes > MAX_FILE_SIZE_BYTES
-            is_skipped = not is_supported or exceeds_size
+            is_skipped = not is_supported or not has_grammar or exceeds_size
             skip_reason: str | None = None
             if not is_supported:
                 skip_reason = f"Unsupported extension '{ext}'"
+            elif not has_grammar:
+                language_label = _EXTENSION_TO_LANGUAGE.get(ext, ext)
+                skip_reason = f"No parser available for '{language_label}' files"
             elif exceeds_size:
                 skip_reason = f"File size {size_bytes} exceeds limit {MAX_FILE_SIZE_BYTES}"
 
@@ -121,6 +131,15 @@ def build_manifest(
 
     languages = _build_language_stats(language_file_counts, language_byte_counts)
     primary_language = _pick_primary_language(language_file_counts)
+    # When every file is skipped the languages map is empty; add the "Unknown"
+    # sentinel so RepositoryManifest's primary_language validator does not reject it.
+    if primary_language not in languages:
+        languages[primary_language] = LanguageStats(
+            language=primary_language,
+            file_count=0,
+            estimated_line_count=0,
+            percentage_of_codebase=0.0,
+        )
     default_branch = _detect_default_branch(root)
 
     return RepositoryManifest(

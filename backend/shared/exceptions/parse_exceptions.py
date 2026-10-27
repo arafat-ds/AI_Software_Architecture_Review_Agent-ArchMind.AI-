@@ -45,11 +45,17 @@ class ZeroParseableFilesError(ParseError):
     """
 
     def __init__(self, files_attempted: int, files_skipped: int) -> None:
-        super().__init__(
-            f"No files were successfully parsed. "
-            f"Attempted: {files_attempted}, Skipped: {files_skipped}. "
-            "Ensure the repository contains supported language files."
-        )
+        if files_attempted == 0:
+            detail = (
+                "The repository contains no files in a supported language. "
+                "Supported languages: Python, JavaScript, TypeScript, Go."
+            )
+        else:
+            detail = (
+                f"Attempted: {files_attempted}, Skipped: {files_skipped}. "
+                "All files failed to parse (possible syntax errors or binary content)."
+            )
+        super().__init__(f"No files were successfully parsed. {detail}")
         self.files_attempted = files_attempted
         self.files_skipped = files_skipped
 

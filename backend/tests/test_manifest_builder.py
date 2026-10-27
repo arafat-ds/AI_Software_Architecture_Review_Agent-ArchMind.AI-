@@ -227,3 +227,110 @@ def test_file_counts_are_consistent(tmp_path):
     )
 
     assert manifest.analyzable_file_count + manifest.skipped_file_count == manifest.total_file_count
+
+
+# ---------------------------------------------------------------------------
+# Grammar-supported-extensions filtering (Flutter / no-grammar language fix)
+# ---------------------------------------------------------------------------
+
+def _make_git(tmp_path: Path) -> None:
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir(exist_ok=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+
+
+def test_dart_only_repo_all_files_skipped(tmp_path):
+    """A repo with only .dart files must have zero analyzable files.
+
+    .dart is not in SUPPORTED_EXTENSIONS at all, so files are skipped as
+    "Unsupported extension" — they never even reach the grammar check.
+    """
+    _make_git(tmp_path)
+    (tmp_path / "main.dart").write_text("void main() {}\n", encoding="utf-8")
+    (tmp_path / "widget.dart").write_text("class MyWidget {}\n", encoding="utf-8")
+
+    manifest = build_manifest(
+        job_id=uuid.uuid4(),
+        repo_url="https://github.com/test/flutter_app",
+        repo_name="flutter_app",
+        clone_path=str(tmp_path),
+    )
+
+    assert manifest.analyzable_file_count == 0
+    dart_entries = [f for f in manifest.file_list if f.path.endswith(".dart")]
+    assert len(dart_entries) == 2
+    for entry in dart_entries:
+        assert entry.is_skipped is True
+        assert entry.skip_reason is not None
+        assert "Unsupported extension" in entry.skip_reason
+
+
+def test_python_repo_files_are_analyzable(tmp_path):
+    """A repo with .py files must classify them as analyzable (not skipped)."""
+    _make_git(tmp_path)
+    (tmp_path / "app.py").write_text("def run(): pass\n", encoding="utf-8")
+    (tmp_path / "utils.py").write_text("def helper(): return 1\n", encoding="utf-8")
+
+    manifest = build_manifest(
+        job_id=uuid.uuid4(),
+        repo_url="https://github.com/test/py_app",
+        repo_name="py_app",
+        clone_path=str(tmp_path),
+    )
+
+    assert manifest.analyzable_file_count == 2
+    py_entries = [f for f in manifest.file_list if f.path.endswith(".py")]
+    for entry in py_entries:
+        assert entry.is_skipped is False
+        assert entry.skip_reason is None
+
+
+def test_mixed_dart_python_repo_only_python_analyzable(tmp_path):
+    """In a mixed Dart+Python repo, only .py files must be analyzable."""
+    _make_git(tmp_path)
+    (tmp_path / "main.dart").write_text("void main() {}\n", encoding="utf-8")
+    (tmp_path / "helper.dart").write_text("class Foo {}\n", encoding="utf-8")
+    (tmp_path / "script.py").write_text("def run(): pass\n", encoding="utf-8")
+
+    manifest = build_manifest(
+        job_id=uuid.uuid4(),
+        repo_url="https://github.com/test/mixed_app",
+        repo_name="mixed_app",
+        clone_path=str(tmp_path),
+    )
+
+    assert manifest.analyzable_file_count == 1
+    py_entry = next(f for f in manifest.file_list if f.path.endswith(".py"))
+    assert py_entry.is_skipped is False
+
+    dart_entries = [f for f in manifest.file_list if f.path.endswith(".dart")]
+    for entry in dart_entries:
+        assert entry.is_skipped is True
+        assert entry.skip_reason is not None
+        assert "Unsupported extension" in entry.skip_reason
+
+
+def test_cpp_files_skipped_no_grammar(tmp_path):
+    """C++ files (.cpp) are in SUPPORTED_EXTENSIONS but have no Tree-sitter grammar.
+
+    They must be skipped with 'No parser available' — not counted as analyzable.
+    This mirrors the Flutter platform-layer files that caused the FatalNodeError.
+    """
+    _make_git(tmp_path)
+    (tmp_path / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+    (tmp_path / "util.cpp").write_text("void helper() {}\n", encoding="utf-8")
+
+    manifest = build_manifest(
+        job_id=uuid.uuid4(),
+        repo_url="https://github.com/test/cpp_lib",
+        repo_name="cpp_lib",
+        clone_path=str(tmp_path),
+    )
+
+    assert manifest.analyzable_file_count == 0
+    cpp_entries = [f for f in manifest.file_list if f.path.endswith(".cpp")]
+    assert len(cpp_entries) == 2
+    for entry in cpp_entries:
+        assert entry.is_skipped is True
+        assert entry.skip_reason is not None
+        assert "No parser available" in entry.skip_reason
