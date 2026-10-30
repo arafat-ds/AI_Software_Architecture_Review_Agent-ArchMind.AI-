@@ -59,5 +59,9 @@ class JobStatusResponse(BaseModel):
     report_id: UUID | None = Field(default=None, description="UUID of the generated report. Set when COMPLETE.")
     error_message: str | None = Field(default=None, description="Human-readable error. Set when FAILED.")
     error_type: str | None = Field(default=None, description="Exception class name. Set when FAILED.")
+    current_stage: str | None = Field(
+        default=None,
+        description="Current workflow stage. Non-null while status is RUNNING.",
+    )
 
     model_config = {"extra": "ignore"}

@@ -20,6 +20,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.genai.errors import ServerError as GenaiServerError
 
 from shared.exceptions.llm_exceptions import (
     EmbeddingError,
@@ -33,7 +34,7 @@ from shared.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
-_RETRYABLE_EXCEPTIONS = (ResourceExhausted, InternalServerError, ServiceUnavailable)
+_RETRYABLE_EXCEPTIONS = (ResourceExhausted, InternalServerError, ServiceUnavailable, GenaiServerError)
 _BACKOFF_BASE_SECONDS: float = 2.0
 
 

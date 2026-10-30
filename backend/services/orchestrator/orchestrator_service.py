@@ -15,11 +15,13 @@ Architecture model: single-process, no distributed workers.
 Responsibilities:
   create_job() — builds a PENDING JobRecord and inserts it to Supabase.
   run()        — blocking method called inside ThreadPoolExecutor:
-                   1. Mark job RUNNING.
-                   2. Create initial workflow state and invoke the LangGraph graph.
-                   3. On FatalNodeError: mark job FAILED with node-scoped error_type.
-                   4. On any other exception: mark job FAILED with sanitized message.
-                   5. Never re-raise — the worker thread must not die with an
+                   1. Mark job RUNNING (fatal if fails).
+                   2. Write initial current_stage="INGESTING" (non-fatal).
+                   3. Create initial workflow state and stream the LangGraph graph.
+                   4. After each node yields, write the next current_stage (non-fatal).
+                   5. On FatalNodeError: mark job FAILED with node-scoped error_type.
+                   6. On any other exception: mark job FAILED with sanitized message.
+                   7. Never re-raise — the worker thread must not die with an
                       uncaught exception.
 
 Responsibility boundary:
@@ -30,7 +32,7 @@ Responsibility boundary:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from core.workflow.graph import get_compiled_graph
 from core.workflow.state import create_initial_state
@@ -41,6 +43,20 @@ from shared.types.enums import JobStatus
 from shared.types.job_types import JobRecord
 
 logger = get_logger(__name__)
+
+# Maps completed node name → current_stage value to write for the node that starts next.
+# Each entry is written after the keyed node's chunk is yielded (meaning that node has
+# completed and the next is starting).
+# persistence_node is excluded: PersistenceNode writes COMPLETE to Supabase itself.
+_NEXT_STAGE_MAP: dict[str, str] = {
+    "ingest_node":                "PARSING",
+    "parse_node":                 "ANALYZING_ARCHITECTURE",
+    "architecture_analysis_node": "ANALYZING_SECURITY",
+    "security_analysis_node":     "RETRIEVING_RAG",
+    "rag_retrieval_node":         "SYNTHESIZING",
+    "recommendation_node":        "ASSEMBLING",
+    "report_generation_node":     "PERSISTING",
+}
 
 
 class AnalysisOrchestrator:
@@ -99,7 +115,7 @@ class AnalysisOrchestrator:
         The worker thread must never terminate with an uncaught exception.
 
         On success: no-op with respect to job status — PersistenceNode has
-        already written COMPLETE and report_id to Supabase during graph.invoke().
+        already written COMPLETE and report_id to Supabase during graph.stream().
 
         Args:
             job_id: UUID of the job created by create_job().
@@ -125,11 +141,20 @@ class AnalysisOrchestrator:
             )
             return
 
-        # Step 2: Invoke the LangGraph graph.
+        # Step 1b: Write initial stage. Best-effort — a missing current_stage column
+        # or any Supabase error must not prevent the workflow from starting.
+        self._attempt_stage_update(job_id, "INGESTING")
+
+        # Step 2: Stream the LangGraph graph, writing current_stage after each
+        # node completes. Stage updates are non-fatal; workflow continues on failure.
         logger.info("AnalysisOrchestrator: starting workflow", extra={"job_id": str(job_id)})
         try:
             state = create_initial_state(job_id=job_id, repo_url=repo_url)
-            get_compiled_graph().invoke(state)
+            for chunk in get_compiled_graph().stream(state):
+                node_name = next(iter(chunk))
+                next_stage = _NEXT_STAGE_MAP.get(node_name)
+                if next_stage:
+                    self._attempt_stage_update(job_id, next_stage)
             logger.info("AnalysisOrchestrator: workflow completed successfully", extra={
                 "job_id": str(job_id),
             })
@@ -160,6 +185,29 @@ class AnalysisOrchestrator:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _attempt_stage_update(self, job_id: UUID, stage: str) -> None:
+        """Write current_stage to Supabase. Best-effort — never raises.
+
+        A missing current_stage column (pre-migration deployment) or any
+        Supabase error is caught, logged as a warning, and ignored. The
+        workflow always continues regardless of stage update success.
+
+        Args:
+            job_id: UUID of the job to update.
+            stage: WorkflowStatus string value to write (e.g. "INGESTING").
+        """
+        try:
+            self._supabase.update_job(job_id, {"current_stage": stage})
+            logger.debug("AnalysisOrchestrator: stage updated", extra={
+                "job_id": str(job_id),
+                "stage": stage,
+            })
+        except Exception as exc:
+            logger.warning(
+                "AnalysisOrchestrator: stage update failed (non-fatal)",
+                extra={"job_id": str(job_id), "stage": stage, "error": str(exc)},
+            )
 
     def _attempt_fail_update(
         self,

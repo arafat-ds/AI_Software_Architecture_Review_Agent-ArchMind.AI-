@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     report_id       UUID,
     error_message   TEXT,
     error_type      TEXT,
+    current_stage   TEXT,
 
     CONSTRAINT jobs_status_check CHECK (
         status IN ('PENDING', 'RUNNING', 'COMPLETE', 'FAILED')

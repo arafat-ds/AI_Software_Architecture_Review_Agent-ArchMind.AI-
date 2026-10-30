@@ -31,6 +31,7 @@ export interface JobStatusResponse {
   report_id: string | null;
   error_message: string | null;
   error_type: string | null;
+  current_stage: string | null;
 }
 
 export interface ReportMetadata {
