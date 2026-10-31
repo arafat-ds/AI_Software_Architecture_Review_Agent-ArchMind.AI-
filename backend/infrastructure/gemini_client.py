@@ -12,6 +12,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+import re
+
 import google.genai as genai
 import google.genai.types as genai_types
 from google.api_core.exceptions import (
@@ -20,6 +22,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.genai.errors import ClientError as GenaiClientError
 from google.genai.errors import ServerError as GenaiServerError
 
 from shared.exceptions.llm_exceptions import (
@@ -36,6 +39,7 @@ logger = get_logger(__name__)
 
 _RETRYABLE_EXCEPTIONS = (ResourceExhausted, InternalServerError, ServiceUnavailable, GenaiServerError)
 _BACKOFF_BASE_SECONDS: float = 2.0
+_IMMEDIATE_FAIL_THRESHOLD_SECONDS: float = 120.0
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,31 @@ class GeminiClient:
                     output_tokens=output_tokens,
                 )
 
+            except GenaiClientError as exc:
+                if _is_rate_limit_error(exc):
+                    retry_after = _parse_retry_after(exc)
+                    logger.warning("Gemini 429 rate limit", extra={
+                        "model": self._generation_model,
+                        "attempt": attempt,
+                        "retry_after": retry_after,
+                        "error": str(exc),
+                    })
+                    if retry_after is not None and retry_after > _IMMEDIATE_FAIL_THRESHOLD_SECONDS:
+                        raise RateLimitError(
+                            model_id=self._generation_model,
+                            retry_after_seconds=int(retry_after),
+                        ) from exc
+                    if attempt < self._max_retries:
+                        time.sleep(retry_after or _backoff(attempt))
+                        last_exc = exc
+                    else:
+                        raise RateLimitError(
+                            model_id=self._generation_model,
+                            retry_after_seconds=int(retry_after) if retry_after else 0,
+                        ) from exc
+                else:
+                    raise
+
             except ResourceExhausted as exc:
                 retry_after = _parse_retry_after(exc)
                 if attempt < self._max_retries:
@@ -134,7 +163,7 @@ class GeminiClient:
                 else:
                     raise RateLimitError(
                         model_id=self._generation_model,
-                        retry_after_seconds=retry_after or 0,
+                        retry_after_seconds=int(retry_after) if retry_after else 0,
                     ) from exc
 
             except DeadlineExceeded as exc:
@@ -241,11 +270,62 @@ def _backoff(attempt: int) -> float:
     return _BACKOFF_BASE_SECONDS ** (attempt + 1)
 
 
+_RETRY_DELAY_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([smh]?)", re.IGNORECASE)
+_SUFFIX_MULTIPLIERS = {"s": 1, "m": 60, "h": 3600, "": 1}
+
+
 def _parse_retry_after(exc: Exception) -> float | None:
-    msg = str(exc).lower()
-    for part in msg.split():
-        try:
-            return float(part)
-        except ValueError:
-            continue
-    return None
+    """Extract retry delay in seconds from a Gemini error.
+
+    Handles plain numbers and values with s/m/h suffixes (e.g. '5994s', '90m', '2h').
+    Checks the retryDelay field in error details first, then falls back to scanning
+    the full error string.
+    """
+    # Prefer structured retryDelay from error details
+    raw_delay: str | None = None
+    details = getattr(exc, "details", None) or getattr(exc, "errors", None)
+    # ClientError.details is the full response_json dict; retryDelay lives in
+    # details["details"] or details["error"]["details"] (list of retry info objects)
+    if isinstance(details, dict):
+        candidates: list = (
+            details.get("details")
+            or details.get("error", {}).get("details")
+            or []
+        )
+        for item in candidates:
+            if isinstance(item, dict) and "retryDelay" in item:
+                raw_delay = str(item["retryDelay"])
+                break
+    elif isinstance(details, list):
+        for item in details:
+            if isinstance(item, dict) and "retryDelay" in item:
+                raw_delay = str(item["retryDelay"])
+                break
+    if raw_delay is None:
+        # Fall back: scan entire error string for pattern like '5994s' or '90m'
+        msg = str(exc)
+        # Look for retryDelay key-value in string form
+        kv_match = re.search(r"['\"]?retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?[smh]?)['\"]?", msg, re.IGNORECASE)
+        if kv_match:
+            raw_delay = kv_match.group(1)
+        else:
+            # Last resort: find first number with optional suffix
+            m = _RETRY_DELAY_RE.search(msg)
+            raw_delay = m.group(0) if m else None
+
+    if raw_delay is None:
+        return None
+
+    m = _RETRY_DELAY_RE.fullmatch(raw_delay.strip())
+    if not m:
+        return None
+    value = float(m.group(1))
+    suffix = m.group(2).lower()
+    return value * _SUFFIX_MULTIPLIERS.get(suffix, 1)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Return True if exc is a Gemini 429 / RESOURCE_EXHAUSTED error."""
+    status = getattr(exc, "status", "") or ""
+    msg = str(exc)
+    return "RESOURCE_EXHAUSTED" in status.upper() or "RESOURCE_EXHAUSTED" in msg.upper() or "429" in msg

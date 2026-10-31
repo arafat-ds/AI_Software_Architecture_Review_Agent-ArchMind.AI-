@@ -24,6 +24,7 @@ from core.workflow.state import (
     require_field,
 )
 from services.architecture_agent import ArchitectureService
+from shared.exceptions.llm_exceptions import RateLimitError
 from shared.exceptions.workflow_exceptions import FatalNodeError
 from shared.logging.logger import get_logger
 from shared.types.enums import NodeExecutionStatus, WorkflowStatus
@@ -108,6 +109,7 @@ def architecture_analysis_node(state: AnalysisState) -> dict[str, Any]:
         }
 
     except Exception as exc:
+        user_reason = _user_facing_reason(exc)
         error = append_workflow_error(
             state=state,
             node_name=_NODE_NAME,
@@ -121,11 +123,12 @@ def architecture_analysis_node(state: AnalysisState) -> dict[str, Any]:
             "job_id": str(state["job_id"]),
             "error_type": error.error_type,
             "error_id": error.error_id,
+            "detail": str(exc),
         })
 
         raise FatalNodeError(
             node_name=_NODE_NAME,
-            reason=str(exc),
+            reason=user_reason,
             cause=exc,
         ) from exc
 
@@ -133,3 +136,27 @@ def architecture_analysis_node(state: AnalysisState) -> dict[str, Any]:
 def _complete_execution(execution: NodeExecution, status: NodeExecutionStatus) -> None:
     object.__setattr__(execution, "status", status)
     object.__setattr__(execution, "completed_at", datetime.now(tz=timezone.utc))
+
+
+def _user_facing_reason(exc: Exception) -> str:
+    """Return a clean, user-facing error message for a node failure.
+
+    Technical details are preserved in logs via the original exc; this string
+    is stored in the DB and shown in the dashboard.
+    """
+    if isinstance(exc, RateLimitError):
+        retry = getattr(exc, "retry_after_seconds", None)
+        if retry and retry > 0:
+            minutes = retry // 60
+            if minutes >= 60:
+                wait = f"about {minutes // 60} hour(s)"
+            elif minutes > 0:
+                wait = f"about {minutes} minute(s)"
+            else:
+                wait = f"{retry} seconds"
+            return (
+                f"Gemini API daily quota exhausted. "
+                f"Please try again in {wait}."
+            )
+        return "Gemini API rate limit reached. Please try again later."
+    return str(exc)
