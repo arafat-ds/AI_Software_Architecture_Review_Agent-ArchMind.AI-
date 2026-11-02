@@ -24,9 +24,5 @@ export default async function ReportPage({ params }: Props) {
 
   if (!report) notFound();
 
-  return (
-    <div className="py-8 px-4 sm:px-6">
-      <ReportViewer report={report} />
-    </div>
-  );
+  return <ReportViewer report={report} />;
 }
